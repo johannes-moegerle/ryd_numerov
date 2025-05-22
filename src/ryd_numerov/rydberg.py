@@ -11,6 +11,8 @@ from ryd_numerov.model import Database
 from ryd_numerov.model.model_potential import ModelPotential
 from ryd_numerov.model.quantum_defect import QuantumDefect
 from ryd_numerov.radial import Grid, Wavefunction, calc_radial_matrix_element
+from ryd_numerov.radial.wavefunction import WavefunctionNumerov
+from ryd_numerov.radial.whittaker import WavefunctionWhittaker
 from ryd_numerov.units import BaseQuantities, OperatorType, ureg
 
 if TYPE_CHECKING:
@@ -247,6 +249,7 @@ class RydbergState:
     @property
     def wavefunction(self) -> Wavefunction:
         if not hasattr(self, "_wavefunction"):
+            self._wavefunction: Wavefunction
             self.create_wavefunction()
         return self._wavefunction
 
@@ -254,8 +257,16 @@ class RydbergState:
         if hasattr(self, "_wavefunction"):
             raise RuntimeError("The wavefunction was already created, you should not create it again.")
 
-        self._wavefunction = Wavefunction(self.grid, self.model_potential, self.quantum_defect)
+        self._wavefunction = WavefunctionNumerov(self.grid, self.model_potential, self.quantum_defect)
         self._wavefunction.integrate(run_backward, w0, _use_njit)
+        self._grid = self._wavefunction.grid
+
+    def create_wavefunction_whittaker(self) -> None:
+        if hasattr(self, "_wavefunction"):
+            raise RuntimeError("The wavefunction was already created, you should not create it again.")
+
+        self._wavefunction = WavefunctionWhittaker(self.grid, self.quantum_defect)
+        self._wavefunction.integrate()
         self._grid = self._wavefunction.grid
 
     @overload
