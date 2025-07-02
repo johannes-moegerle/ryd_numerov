@@ -66,6 +66,8 @@ class RydbergState:
         self.j = j
         self.m = m
 
+        self._energy_au: Optional[float] = None
+
         self.sanity_check()
 
     def __repr__(self) -> str:
@@ -228,7 +230,7 @@ class RydbergState:
             if self.l <= 10:
                 z_min = 0.0
             else:
-                z_min = self.model.calc_turning_point_z(self.n, self.l, self.j)
+                z_min = self.model.calc_turning_point_z(self.get_energy("a.u."))
                 z_min = np.sqrt(0.5) * z_min - 3  # see also compare_z_min_cutoff.ipynb
         else:
             z_min = np.sqrt(x_min)
@@ -254,13 +256,24 @@ class RydbergState:
         """The list of w values for the wavefunction."""
         return self.wavefunction.w_list
 
-    def create_wavefunction(self, run_backward: bool = True, w0: float = 1e-10, _use_njit: bool = True) -> None:
+    def create_wavefunction(
+        self,
+        run_backward: bool = True,
+        w0: float = 1e-10,
+        *,
+        positive_at: Literal["outer_bound", "inner_bound"] = "inner_bound",
+        _use_njit: bool = True,
+    ) -> None:
         if hasattr(self, "_wavefunction"):
             raise RuntimeError("The wavefunction was already created, you should not create it again.")
 
         self._wavefunction = Wavefunction(self, self.grid, self.model)
-        self._wavefunction.integrate(run_backward, w0, _use_njit)
+        self._wavefunction.integrate(run_backward, w0, positive_at=positive_at, _use_njit=_use_njit)
         self._grid = self._wavefunction.grid
+
+    def set_energy(self, energy_au: float) -> None:
+        """Set the energy of the Rydberg state in atomic units."""
+        self._energy_au = energy_au
 
     @overload
     def get_energy(self, unit: None = None) -> "PintFloat": ...
@@ -269,7 +282,10 @@ class RydbergState:
     def get_energy(self, unit: str) -> float: ...
 
     def get_energy(self, unit: Optional[str] = None) -> Union["PintFloat", float]:
-        energy_au = self.element.calc_energy(self.n, self.l, self.j, unit="a.u.")
+        if self._energy_au is not None:
+            energy_au = self._energy_au
+        else:
+            energy_au = self.element.calc_energy(self.n, self.l, self.j, unit="a.u.")
         if unit == "a.u.":
             return energy_au
         energy: PintFloat = energy_au * BaseQuantities["ENERGY"]
